@@ -357,6 +357,7 @@ newtype Process a = Process {
            , MonadIO
            , MonadReader LocalProcess
            , Typeable
+           , MonadFail
            )
 
 instance MonadThrow Process where
