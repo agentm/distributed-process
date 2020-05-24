@@ -309,7 +309,6 @@ import Control.Distributed.Process.Management.Internal.Types
   , MxSink
   , MxEvent(..)
   )
-import Control.Distributed.Process.Serializable (Serializable)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ask)
 import Control.Monad.Catch (onException)
@@ -319,6 +318,8 @@ import qualified Control.Monad.State as ST
   , lift
   , runStateT
   )
+import Data.Binary (Binary)
+import Data.Typeable (Typeable)
 import Prelude
 
 -- | Publishes an arbitrary @Serializable@ message to the management event bus.
@@ -326,7 +327,7 @@ import Prelude
 -- important that you do not pass unevaluated thunks that might crash the
 -- receiving process via this API, since /all/ registered agents will gain
 -- access to the data structure once it is broadcast by the agent controller.
-mxNotify :: (Serializable a) => a -> Process ()
+mxNotify :: (Binary a, Typeable a) => a -> Process ()
 mxNotify msg = do
   bus <- localEventBus . processNode <$> ask
   liftIO $ publishEvent bus $ unsafeCreateUnencodedMessage msg
@@ -342,7 +343,7 @@ mxGetId = ST.get >>= return . mxAgentId
 
 -- | The 'MxAgent' version of 'mxNotify'.
 --
-mxBroadcast :: (Serializable m) => m -> MxAgent s ()
+mxBroadcast :: (Binary m, Typeable m) => m -> MxAgent s ()
 mxBroadcast msg = do
   state <- ST.get
   liftMX $ liftIO $ atomically $ do
@@ -401,7 +402,7 @@ mxGetLocal = ST.get >>= return . mxLocalState
 -- | Create an 'MxSink' from an expression taking a @Serializable@ type @m@,
 -- that yields an 'MxAction' in the 'MxAgent' monad.
 --
-mxSink :: forall s m . (Serializable m)
+mxSink :: forall s m . (Binary m, Typeable m)
        => (m -> MxAgent s MxAction)
        -> MxSink s
 mxSink act msg = do

@@ -94,13 +94,13 @@ import Control.Distributed.Process.Internal.Types
   , sendPortProcessId
   , unsafeCreateUnencodedMessage
   )
-import Control.Distributed.Process.Serializable (Serializable)
-
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ask)
+import Data.Binary (Binary)
+import Data.Typeable (Typeable)
 
 -- | Named send to a process in the local registry (asynchronous)
-nsend :: Serializable a => String -> a -> Process ()
+nsend :: (Binary a, Typeable a) => String -> a -> Process ()
 nsend label msg = do
   proc <- ask
   let us = processId proc
@@ -111,7 +111,7 @@ nsend label msg = do
   sendCtrlMsg Nothing (NamedSend label msg')
 
 -- | Named send to a process in a remote registry (asynchronous)
-nsendRemote :: Serializable a => NodeId -> String -> a -> Process ()
+nsendRemote :: (Binary a, Typeable a) => NodeId -> String -> a -> Process ()
 nsendRemote nid label msg = do
   proc <- ask
   let us = processId proc
@@ -126,7 +126,7 @@ nsendRemote nid label msg = do
         sendCtrlMsg (Just nid) (NamedSend label (createMessage msg))
 
 -- | Send a message
-send :: Serializable a => ProcessId -> a -> Process ()
+send :: (Binary a, Typeable a) => ProcessId -> a -> Process ()
 send them msg = do
   proc <- ask
   let node     = localNodeId (processNode proc)
@@ -153,7 +153,7 @@ send them msg = do
 -- Message passing with 'usend' is ordered for a given sender and receiver
 -- if the messages arrive at all.
 --
-usend :: Serializable a => ProcessId -> a -> Process ()
+usend :: (Binary a, Typeable a) => ProcessId -> a -> Process ()
 usend them msg = do
     proc <- ask
     let there = processNodeId them
@@ -175,7 +175,7 @@ usend them msg = do
 --
 
 -- | Send a message on a typed channel
-sendChan :: Serializable a => SendPort a -> a -> Process ()
+sendChan :: (Binary a, Typeable a) => SendPort a -> a -> Process ()
 sendChan (SendPort cid) msg = do
   proc <- ask
   let node = processNode proc
@@ -196,5 +196,5 @@ sendChan (SendPort cid) msg = do
     unsafeSendChanLocal p m = sendCtrlMsg Nothing $ LocalPortSend p m
 
 -- | Create an unencoded @Message@ for any @Serializable@ type.
-wrapMessage :: Serializable a => a -> Message
+wrapMessage :: (Binary a, Typeable a) => a -> Message
 wrapMessage = unsafeCreateUnencodedMessage

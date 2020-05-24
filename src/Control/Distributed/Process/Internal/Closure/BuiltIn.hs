@@ -51,7 +51,6 @@ import Control.Distributed.Static
   )
 import Control.Distributed.Process.Serializable
   ( SerializableDict(..)
-  , Serializable
   , TypeableDict(..)
   )
 import Control.Distributed.Process.Internal.Types
@@ -74,6 +73,7 @@ import Control.Distributed.Process.Internal.Primitives
   , matchIf
   , receiveWait
   )
+import Data.Binary (Binary)
 
 --------------------------------------------------------------------------------
 -- Remote table                                                               --
@@ -193,7 +193,7 @@ splitCP p q = cpSplitStatic `closureApplyStatic` p `closureApply` q
     cpSplitStatic = staticLabel "$cpSplit"
 
 -- | 'CP' version of 'Control.Monad.return'
-returnCP :: forall a. Serializable a
+returnCP :: forall a. (Binary a, Typeable a)
          => Static (SerializableDict a) -> a -> Closure (Process a)
 returnCP dict x = closure decoder (encode x)
   where

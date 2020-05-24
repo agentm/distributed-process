@@ -63,11 +63,12 @@ import Control.Distributed.Process.Internal.Types
   , SendPort
   , MxEventBus(..)
   )
-import Control.Distributed.Process.Serializable
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ask)
 
 import qualified Data.Set as Set (fromList)
+import Data.Binary (Binary)
+import Data.Typeable (Typeable)
 import Prelude
 
 --------------------------------------------------------------------------------
@@ -148,7 +149,7 @@ traceLogFmt :: String -> [TraceArg] -> Process ()
 traceLogFmt d ls = withLocalTracer $ \t -> liftIO $ Tracer.traceLogFmt t d ls
 
 -- | Send an arbitrary 'Message' to the tracer process.
-traceMessage :: Serializable m => m -> Process ()
+traceMessage :: (Binary m, Typeable m) => m -> Process ()
 traceMessage msg = withLocalTracer $ \t -> liftIO $ Tracer.traceMessage t msg
 
 withLocalTracer :: (MxEventBus -> Process ()) -> Process ()

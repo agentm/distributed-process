@@ -26,7 +26,7 @@ import Control.Distributed.Process.Internal.Types
   , ReceivePort(..)
   , nullProcessId
   )
-import Control.Distributed.Process.Serializable (Serializable, SerializableDict)
+import Control.Distributed.Process.Serializable (SerializableDict)
 import Control.Distributed.Process.Internal.Closure.BuiltIn
   ( sdictSendPort
   , sndStatic
@@ -56,6 +56,8 @@ import Control.Distributed.Process.Internal.Primitives
   , spawnAsync
   , reconnect
   )
+import Data.Binary (Binary)
+import Data.Typeable (Typeable)
 
 -- | Spawn a process
 --
@@ -104,7 +106,7 @@ spawnMonitor nid proc = do
 -- "Control.Distributed.Process.Closure".
 --
 -- See also 'spawn'.
-call :: Serializable a
+call :: (Binary a, Typeable a)
         => Static (SerializableDict a)
         -> NodeId
         -> Closure (Process a)
@@ -148,7 +150,7 @@ spawnSupervised nid proc = do
 
 -- | Spawn a new process, supplying it with a new 'ReceivePort' and return
 -- the corresponding 'SendPort'.
-spawnChannel :: forall a. Serializable a => Static (SerializableDict a)
+spawnChannel :: forall a. (Binary a, Typeable a) => Static (SerializableDict a)
              -> NodeId
              -> Closure (ReceivePort a -> Process ())
              -> Process (SendPort a)

@@ -200,7 +200,6 @@ import Control.Distributed.Process.Internal.Types
   , Message
   , localProcessWithId
   )
-import Control.Distributed.Process.Serializable (Serializable)
 import Control.Distributed.Process.Internal.Primitives
   ( -- Basic messaging
     send
@@ -328,6 +327,8 @@ import Prelude
 import Prelude hiding (catch)
 #endif
 import qualified Control.Exception as Exception (onException)
+import Data.Binary (Binary)
+import Data.Typeable (Typeable)
 import Data.Accessor ((^.))
 import Data.Foldable (forM_)
 
@@ -407,7 +408,7 @@ spawnLocal proc = do
 
 -- | Create a new typed channel, spawn a process on the local node, passing it
 -- the receive port, and return the send port
-spawnChannelLocal :: Serializable a
+spawnChannelLocal :: (Binary a, Typeable a)
                   => (ReceivePort a -> Process ())
                   -> Process (SendPort a)
 spawnChannelLocal proc = do

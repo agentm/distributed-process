@@ -28,11 +28,8 @@ import Data.Binary (decode)
 import Data.Map (Map)
 import qualified Data.Map as Map
   ( empty
-  , delete
   , toList
   , fromList
-  , insert
-  , lookup
   , partition
   , partitionWithKey
   , elems
@@ -201,7 +198,6 @@ import Control.Distributed.Process.Management.Internal.Trace.Types
   , traceLogFmt
   , enableTrace
   )
-import Control.Distributed.Process.Serializable (Serializable)
 import Control.Distributed.Process.Internal.Messaging
   ( sendBinary
   , closeImplicitReconnections
@@ -213,9 +209,6 @@ import Control.Distributed.Process.Internal.Primitives
   , match
   , sendChan
   , unwrapMessage
-  , monitor
-  , unmonitorAsync
-  , getSelfNode
   , SayMessage(..)
   )
 import Control.Distributed.Process.Internal.Types (SendPort, Tracer(..))
@@ -226,6 +219,7 @@ import qualified Control.Distributed.Process.Internal.StrictContainerAccessors a
   , mapDefault
   )
 import Control.Monad.Catch (try)
+import Data.Binary (Binary)
 import GHC.IO (IO(..), unsafeUnmask)
 import GHC.Base ( maskAsyncExceptions# )
 
@@ -1106,7 +1100,7 @@ ncEffectGetInfo from pid =
                  , infoMonitors           = Set.toList itsMons
                  , infoLinks              = Set.toList itsLinks
                  }
-  where dispatch :: (Serializable a)
+  where dispatch :: (Binary a, Typeable a)
                  => Bool
                  -> ProcessId
                  -> a
@@ -1222,7 +1216,7 @@ isValidLocalIdentifier ident = do
 -- Messages to local processes                                                --
 --------------------------------------------------------------------------------
 
-postAsMessage :: Serializable a => ProcessId -> a -> NC ()
+postAsMessage :: (Binary a, Typeable a) => ProcessId -> a -> NC ()
 postAsMessage pid = postMessage pid . createUnencodedMessage
 
 postMessage :: ProcessId -> Message -> NC ()

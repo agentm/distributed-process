@@ -53,8 +53,8 @@ import Control.Distributed.Process.Internal.Types
   , SendPortId(sendPortProcessId)
   , Identifier(NodeIdentifier, ProcessIdentifier, SendPortIdentifier)
   )
-import Control.Distributed.Process.Serializable (Serializable)
 import Data.Foldable (forM_)
+import Data.Typeable (Typeable)
 
 --------------------------------------------------------------------------------
 -- Message sending                                                            --
@@ -91,7 +91,7 @@ sendBinary :: Binary a
 sendBinary node from to implicitReconnect
   = sendPayload node from to implicitReconnect . BSL.toChunks . encode
 
-sendMessage :: Serializable a
+sendMessage :: (Binary a, Typeable a)
             => LocalNode
             -> Identifier
             -> Identifier

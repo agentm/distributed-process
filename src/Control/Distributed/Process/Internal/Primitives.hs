@@ -168,7 +168,6 @@ import Control.Distributed.Process.Internal.CQueue
   , BlockSpec(..)
   , MatchOn(..)
   )
-import Control.Distributed.Process.Serializable (Serializable, fingerprint)
 import Data.Accessor ((^.), (^:), (^=))
 import Control.Distributed.Static
   ( Static
@@ -236,6 +235,7 @@ import Control.Distributed.Process.Internal.WeakTQueue
   , readTQueue
   , mkWeakTQueue
   )
+import Control.Distributed.Process.Serializable (fingerprint)
 import Prelude
 
 import Unsafe.Coerce
@@ -245,7 +245,7 @@ import Unsafe.Coerce
 --------------------------------------------------------------------------------
 
 -- | Send a message
-send :: Serializable a => ProcessId -> a -> Process ()
+send :: (Binary a, Typeable a) => ProcessId -> a -> Process ()
 -- This requires a lookup on every send. If we want to avoid that we need to
 -- modify serializable to allow for stateful (IO) deserialization.
 send them msg = do
@@ -268,7 +268,7 @@ send them msg = do
 -- and (in the case when the destination process resides on the same local
 -- node) therefore ensure that the payload is fully evaluated before it is
 -- delivered.
-unsafeSend :: Serializable a => ProcessId -> a -> Process ()
+unsafeSend :: (Binary a, Typeable a) => ProcessId -> a -> Process ()
 unsafeSend = Unsafe.send
 
 -- | Send a message unreliably.
@@ -280,7 +280,7 @@ unsafeSend = Unsafe.send
 -- Message passing with 'usend' is ordered for a given sender and receiver
 -- if the messages arrive at all.
 --
-usend :: Serializable a => ProcessId -> a -> Process ()
+usend :: (Binary a, Typeable a) => ProcessId -> a -> Process ()
 usend them msg = do
     proc <- ask
     let there = processNodeId them
@@ -296,11 +296,11 @@ usend them msg = do
 -- the message when the destination process resides on the same local
 -- node. Therefore, a local receiver would need to be prepared to cope with any
 -- errors resulting from evaluation of the message.
-unsafeUSend :: Serializable a => ProcessId -> a -> Process ()
+unsafeUSend :: (Binary a, Typeable a) => ProcessId -> a -> Process ()
 unsafeUSend = Unsafe.usend
 
 -- | Wait for a message of a specific type
-expect :: forall a. Serializable a => Process a
+expect :: forall a. (Binary a, Typeable a) => Process a
 expect = receiveWait [match return]
 
 --------------------------------------------------------------------------------
@@ -314,7 +314,7 @@ expect = receiveWait [match return]
 -- function, but will remain accessible. Thus reading from the ReceivePort will
 -- fail silently thereafter, blocking indefinitely (unless a timeout is used).
 --
-newChan :: Serializable a => Process (SendPort a, ReceivePort a)
+newChan :: (Binary a, Typeable a) => Process (SendPort a, ReceivePort a)
 newChan = do
     proc <- ask
     liftIO . modifyMVar (processState proc) $ \st -> do
@@ -338,7 +338,7 @@ newChan = do
       return . (typedChannelWithId lcid ^= Nothing)
 
 -- | Send a message on a typed channel
-sendChan :: Serializable a => SendPort a -> a -> Process ()
+sendChan :: (Binary a, Typeable a) => SendPort a -> a -> Process ()
 sendChan (SendPort cid) msg = do
   proc <- ask
   let node = processNode proc
@@ -359,16 +359,16 @@ sendChan (SendPort cid) msg = do
 -- serialize and (in the case when the @ReceivePort@ resides on the same local
 -- node) therefore ensure that the payload is fully evaluated before it is
 -- delivered.
-unsafeSendChan :: Serializable a => SendPort a -> a -> Process ()
+unsafeSendChan :: (Binary a, Typeable a) => SendPort a -> a -> Process ()
 unsafeSendChan = Unsafe.sendChan
 
 -- | Wait for a message on a typed channel
-receiveChan :: Serializable a => ReceivePort a -> Process a
+receiveChan :: (Binary a, Typeable a) => ReceivePort a -> Process a
 receiveChan = liftIO . atomically . receiveSTM
 
 -- | Like 'receiveChan' but with a timeout. If the timeout is 0, do a
 -- non-blocking check for a message.
-receiveChanTimeout :: Serializable a => Int -> ReceivePort a -> Process (Maybe a)
+receiveChanTimeout :: (Binary a, Typeable a) => Int -> ReceivePort a -> Process (Maybe a)
 receiveChanTimeout 0 ch = liftIO . atomically $
   (Just <$> receiveSTM ch) `orElse` return Nothing
 receiveChanTimeout n ch = liftIO . timeout n . atomically $
@@ -378,12 +378,12 @@ receiveChanTimeout n ch = liftIO . timeout n . atomically $
 --
 -- The result port is left-biased: if there are messages available on more
 -- than one port, the first available message is returned.
-mergePortsBiased :: Serializable a => [ReceivePort a] -> Process (ReceivePort a)
+mergePortsBiased :: (Binary a, Typeable a) => [ReceivePort a] -> Process (ReceivePort a)
 mergePortsBiased = return . ReceivePort. foldr1 orElse . map receiveSTM
 
 -- | Like 'mergePortsBiased', but with a round-robin scheduler (rather than
 -- left-biased)
-mergePortsRR :: Serializable a => [ReceivePort a] -> Process (ReceivePort a)
+mergePortsRR :: (Binary a, Typeable a) => [ReceivePort a] -> Process (ReceivePort a)
 mergePortsRR = \ps -> do
     psVar <- liftIO . atomically $ newTVar (map receiveSTM ps)
     return $ ReceivePort (rr psVar)
@@ -452,11 +452,11 @@ matchSTM :: STM a -> (a -> Process b) -> Match b
 matchSTM stm fn = Match $ MatchChan (fmap fn stm)
 
 -- | Match against any message of the right type
-match :: forall a b. Serializable a => (a -> Process b) -> Match b
+match :: forall a b. (Binary a, Typeable a) => (a -> Process b) -> Match b
 match = matchIf (const True)
 
 -- | Match against any message of the right type that satisfies a predicate
-matchIf :: forall a b. Serializable a => (a -> Bool) -> (a -> Process b) -> Match b
+matchIf :: forall a b. (Binary a, Typeable a) => (a -> Bool) -> (a -> Process b) -> Match b
 matchIf c p = Match $ MatchMsg $ \msg ->
   case messageFingerprint msg == fingerprint (undefined :: a) of
     False -> Nothing
@@ -534,12 +534,12 @@ uforward msg them = do
 --    (Just "blah") <- unwrapMessage m :: Process (Maybe String)
 -- @
 --
-wrapMessage :: Serializable a => a -> Message
+wrapMessage :: (Binary a, Typeable a) => a -> Message
 wrapMessage = createUnencodedMessage -- see [note Serializable UnencodedMessage]
 
 -- | This is the /unsafe/ variant of 'wrapMessage'. See
 -- "Control.Distributed.Process.UnsafePrimitives" for details.
-unsafeWrapMessage :: Serializable a => a -> Message
+unsafeWrapMessage :: (Binary a, Typeable a) => a -> Message
 unsafeWrapMessage = Unsafe.wrapMessage
 
 -- [note Serializable UnencodedMessage]
@@ -558,7 +558,7 @@ unsafeWrapMessage = Unsafe.wrapMessage
 -- Whereas this expression, will yield @Just "foo"@
 -- > unwrapMessage (wrapMessage "foo") :: Process (Maybe String)
 --
-unwrapMessage :: forall m a. (Monad m, Serializable a) => Message -> m (Maybe a)
+unwrapMessage :: forall m a. (Monad m, Binary a, Typeable a) => Message -> m (Maybe a)
 unwrapMessage msg =
   case messageFingerprint msg == fingerprint (undefined :: a) of
     False -> return Nothing :: m (Maybe a)
@@ -581,7 +581,7 @@ unwrapMessage msg =
 --
 -- Intended for use in `catchesExit` and `matchAny` primitives.
 --
-handleMessage :: forall m a b. (Monad m, Serializable a)
+handleMessage :: forall m a b. (Monad m, Binary a, Typeable a)
               => Message -> (a -> m b) -> m (Maybe b)
 handleMessage msg proc = handleMessageIf msg (const True) proc
 
@@ -590,7 +590,7 @@ handleMessage msg proc = handleMessageIf msg (const True) proc
 -- handler, other returns @Nothing@ to indicate failure. See 'handleMessage'
 -- for further information about runtime type checking.
 --
-handleMessageIf :: forall m a b . (Monad m, Serializable a)
+handleMessageIf :: forall m a b . (Monad m, Binary a, Typeable a)
                 => Message
                 -> (a -> Bool)
                 -> (a -> m b)
@@ -615,13 +615,13 @@ handleMessageIf msg c proc = do
 -- | As 'handleMessage' but ignores result, which is useful if you don't
 -- care whether or not the handler succeeded.
 --
-handleMessage_ :: forall m a . (Monad m, Serializable a)
+handleMessage_ :: forall m a . (Monad m, Binary a, Typeable a)
                => Message -> (a -> m ()) -> m ()
 handleMessage_ msg proc = handleMessageIf_ msg (const True) proc
 
 -- | Conditional version of 'handleMessage_'.
 --
-handleMessageIf_ :: forall m a . (Monad m, Serializable a)
+handleMessageIf_ :: forall m a . (Monad m, Binary a, Typeable a)
                 => Message
                 -> (a -> Bool)
                 -> (a -> m ())
@@ -644,7 +644,7 @@ matchAny p = Match $ MatchMsg $ \msg -> Just (p msg)
 -- guarantee that an expression passed to @handleMessage@ will pass the
 -- runtime type checks and therefore be evaluated.
 --
-matchAnyIf :: forall a b. (Serializable a)
+matchAnyIf :: forall a b. ((Binary a, Typeable a))
                        => (a -> Bool)
                        -> (Message -> Process b)
                        -> Match b
@@ -691,7 +691,7 @@ relay !pid = receiveWait [ matchAny (\m -> forward m pid) ] >> relay pid
 -- Unlike 'delegate' the predicate @proc@ runs in the 'Process' monad, allowing
 -- for richer proxy behaviour. If @proc@ returns @False@ or the /runtime type check/
 -- fails, no action is taken and the proxy process will continue running.
-proxy :: Serializable a => ProcessId -> (a -> Process Bool) -> Process ()
+proxy :: (Binary a, Typeable a) => ProcessId -> (a -> Process Bool) -> Process ()
 proxy pid proc = do
   receiveWait [
       matchAny (\m -> do
@@ -719,7 +719,7 @@ terminate = throwM ProcessTerminationException
 
 -- [Issue #110]
 -- | Die immediately - throws a 'ProcessExitException' with the given @reason@.
-die :: Serializable a => a -> Process b
+die :: (Binary a, Typeable a) => a -> Process b
 die reason = do
 -- NOTE: We do /not/ want to use UnencodedMessage here, as the exception
 -- could be decoded by a handler passed to 'catchExit', re-thrown or even
@@ -740,7 +740,7 @@ kill them reason = sendCtrlMsg Nothing (Kill them reason)
 -- | Graceful request to exit a process. Throws 'ProcessExitException' with the
 -- supplied @reason@ encoded as a message. Any /exit signal/ raised in this
 -- manner can be handled using the 'catchExit' family of functions.
-exit :: Serializable a => ProcessId -> a -> Process ()
+exit :: (Binary a, Typeable a) => ProcessId -> a -> Process ()
 -- NOTE: We send the message to our local node controller, which will then
 -- forward it to a remote node controller (if applicable). Sending it directly
 -- to a remote node controller means that that the message may overtake a
@@ -754,7 +754,7 @@ exit them reason = sendCtrlMsg Nothing (Exit them (createMessage reason))
 --
 -- To handle 'ProcessExitException' without regard for /reason/, see 'catch'.
 -- To handle multiple /reasons/ of differing types, see 'catchesExit'.
-catchExit :: forall a b . (Show a, Serializable a)
+catchExit :: forall a b . (Show a, Binary a, Typeable a)
                        => Process b
                        -> (ProcessId -> a -> Process b)
                        -> Process b
@@ -1028,7 +1028,7 @@ catchesHandler handlers e = foldr tryHandler (throwM e) handlers
 --------------------------------------------------------------------------------
 
 -- | Like 'expect' but with a timeout
-expectTimeout :: forall a. Serializable a => Int -> Process (Maybe a)
+expectTimeout :: forall a. (Binary a, Typeable a) => Int -> Process (Maybe a)
 expectTimeout n = receiveTimeout n [match return]
 
 -- | Asynchronous version of 'spawn'
@@ -1049,7 +1049,7 @@ monitorNode =
   monitor' . NodeIdentifier
 
 -- | Monitor a typed channel (asynchronous)
-monitorPort :: forall a. Serializable a => SendPort a -> Process MonitorRef
+monitorPort :: forall a. (Binary a, Typeable a) => SendPort a -> Process MonitorRef
 monitorPort (SendPort cid) =
   monitor' (SendPortIdentifier cid)
 
@@ -1226,7 +1226,7 @@ whereisRemoteAsync nid label = do
     sendCtrlMsg (if nid == here then Nothing else Just nid) (WhereIs label)
 
 -- | Named send to a process in the local registry (asynchronous)
-nsend :: Serializable a => String -> a -> Process ()
+nsend :: (Binary a, Typeable a) => String -> a -> Process ()
 nsend label msg = do
   proc <- ask
   let msg' = createUnencodedMessage msg
@@ -1238,11 +1238,11 @@ nsend label msg = do
 -- This function makes /no/ attempt to serialize and (in the case when the
 -- destination process resides on the same local node) therefore ensure that
 -- the payload is fully evaluated before it is delivered.
-unsafeNSend :: Serializable a => String -> a -> Process ()
+unsafeNSend :: (Binary a, Typeable a) => String -> a -> Process ()
 unsafeNSend = Unsafe.nsend
 
 -- | Named send to a process in a remote registry (asynchronous)
-nsendRemote :: Serializable a => NodeId -> String -> a -> Process ()
+nsendRemote :: (Binary a, Typeable a) => NodeId -> String -> a -> Process ()
 nsendRemote nid label msg = do
   proc <- ask
   let us = processId proc
@@ -1258,7 +1258,7 @@ nsendRemote nid label msg = do
 -- This function makes /no/ attempt to serialize and (in the case when the
 -- destination process resides on the same local node) therefore ensure that
 -- the payload is fully evaluated before it is delivered.
-unsafeNSendRemote :: Serializable a => NodeId -> String -> a -> Process ()
+unsafeNSendRemote :: (Binary a, Typeable a) => NodeId -> String -> a -> Process ()
 unsafeNSendRemote = Unsafe.nsendRemote
 
 --------------------------------------------------------------------------------
@@ -1322,11 +1322,11 @@ reconnectPort them = do
 -- Auxiliary functions                                                        --
 --------------------------------------------------------------------------------
 
-sendLocal :: (Serializable a) => ProcessId -> a -> Process ()
+sendLocal :: ((Binary a, Typeable a)) => ProcessId -> a -> Process ()
 sendLocal to msg =
   sendCtrlMsg Nothing $ LocalSend to (createUnencodedMessage msg)
 
-sendChanLocal :: (Serializable a) => SendPortId -> a -> Process ()
+sendChanLocal :: ((Binary a, Typeable a)) => SendPortId -> a -> Process ()
 sendChanLocal spId msg =
   -- we *must* fully serialize/encode the message here, because
   -- attempting to use `unsafeCoerce' in the node controller
